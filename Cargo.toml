@@ -1,0 +1,13 @@
+[package]
+name = "csv_to_json" # the name of the package
+version = "0.1.0"    # the current version, obeying semver
+authors = ["Darius Murawski <darius@murawski.blog>"]
+edition = "2018"
+license = "MIT"
+
+[dependencies]
+csv = "1.1.6"
+
+[[bin]]
+name = "csv_to_json"
+path = "src/main.rs"
