@@ -12,6 +12,11 @@ This is my first rust project, so feel free to give any feedback.
 This argument references to a path on your filesystem to the file you want to convert.
 I assume that you have headers present. These headers are the keys of the exported json.
 The file have to be encoded with utf8.
+Globbing is supported to convert a bunch of files.
+
+## verbose
+When using the globbing feature, verbose mode is enabled by default. 
+You can disable this behaviour by passing `--quiet true`
 
 ## output
 Path to where to write the json output. This can be left out. 
