@@ -1,17 +1,20 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt::format;
 use std::fs::File;
 use std::io::Write;
+use std::path::{MAIN_SEPARATOR, PathBuf};
 
 
 use csv::{Reader, StringRecord};
 
-pub fn arg_parse(args: Vec<String>) -> Options {
+pub fn arg_parse(args: Vec<String>) -> ApplicationOptions {
     let input: String = String::from("--input");
     let output: String = String::from("--output");
     let quiet: String = String::from("--quiet");
 
-    let mut options = Options::default();
+    let mut options = ApplicationOptions::default();
     // assume only input provided, write to std out
     if args.len() == 2 {
         let input_csv = args[1_usize].clone();
@@ -55,7 +58,7 @@ pub fn build_json_line(record: HashMap<String, String>, header: StringRecord) ->
     a
 }
 
-pub fn read_data(options: &Options) -> (Vec<HashMap<String, String>>, StringRecord) {
+pub fn read_data(options: &ApplicationOptions) -> (Vec<HashMap<String, String>>, StringRecord) {
     let mut rdr = Reader::from_path(&options.input).unwrap();
     let header = rdr.headers().unwrap().clone();
     let data: Vec<HashMap<String, String>> = rdr
@@ -71,33 +74,88 @@ pub fn read_data(options: &Options) -> (Vec<HashMap<String, String>>, StringReco
     (data, header)
 }
 
-pub fn run(options: Options) -> Result<(), Box<dyn Error>> {
-    let (data, header) = read_data(&options);
-    if options.output.is_empty() {
-        for record in data {
-            let line = build_json_line(record, header.clone());
-            print!("{}", line)
-        }
-    } else {
-        let mut file_handler = File::create(&options.output).unwrap();
-        for record in data {
-            let line = build_json_line(record, header.clone());
-            let b = line.as_bytes();
-            file_handler.write_all(b).unwrap();
+fn run_to_stdout(data: Vec<HashMap<String, String>>, header: StringRecord) {
+    for record in data {
+        let line = build_json_line(record, header.clone());
+        print!("{}", line)
+    }
+}
+
+fn run_to_file(data: Vec<HashMap<String, String>>, header: StringRecord, options: ApplicationOptions) {
+    let mut file_handler = File::create(&options.output).unwrap();
+    for record in data {
+        let line = build_json_line(record, header.clone());
+        let b = line.as_bytes();
+        file_handler.write_all(b).unwrap();
+    }
+}
+
+fn to_absolute(option: &ApplicationOptions, path: &PathBuf) -> String {
+    let last = option.input.split(MAIN_SEPARATOR).last().unwrap();
+    let last_with_separator = format!("{}{}", String::from(MAIN_SEPARATOR), String::from(last));
+    let prefix = option.input.replace(&last_with_separator, &String::from(""));
+    format!(
+        "{prefix}/{}.{}",
+        path.file_stem().unwrap().to_str().unwrap(),
+        path.extension().unwrap().to_str().unwrap(),
+    )
+}
+
+fn run_files(options: ApplicationOptions) {
+    for entry in glob::glob(&options.input).unwrap() {
+        match entry {
+            Ok(path) => {
+                let file_name = path.display();
+                println!("{:?}", file_name);
+
+                let mut patched_options = options.clone();
+                patched_options.input = to_absolute(&options, &path);
+
+                if options.output.is_empty() {
+                    patched_options.output = format!("{}.json", file_name);
+                }
+                else {
+                    patched_options.output = format!("{}/{}.json", options.output, file_name);
+                }
+
+                let (data, header) = read_data(&patched_options);
+
+                run_to_file(data,  header, patched_options)
+            },
+
+            // if the path matched but was unreadable,
+            // thereby preventing its contents from matching
+            Err(e) => println!("{:?}", e),
         }
     }
+}
+
+pub fn run(options: ApplicationOptions) -> Result<(), Box<dyn Error>> {
+    if options.input.contains("*") && options.output == "" {
+        run_files(options.clone())
+    }
+
+    if options.output.is_empty() {
+        let (data, header) = read_data(&options);
+        run_to_stdout(data, header)
+    } else {
+        let (data, header) = read_data(&options);
+        run_to_file(data, header, options)
+    }
+
+
     Ok(())
 }
 
-pub struct Options {
+pub struct ApplicationOptions {
     pub input: String,
     pub output: String,
     pub quiet: bool,
 }
 
-impl Clone for Options {
+impl Clone for ApplicationOptions {
     fn clone(&self) -> Self {
-        Options {
+        ApplicationOptions {
             input: self.input.clone(),
             output: self.output.clone(),
             quiet: self.quiet.clone(),
@@ -106,7 +164,7 @@ impl Clone for Options {
 }
 
 
-impl Default for Options {
+impl Default for ApplicationOptions {
     fn default() -> Self {
         Self {
             input: String::from("*.csv"),
@@ -118,6 +176,7 @@ impl Default for Options {
 
 #[cfg(test)]
 mod test {
+    use std::assert_eq;
     use std::collections::HashMap;
     use csv::StringRecord;
 
