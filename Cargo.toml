@@ -8,9 +8,12 @@ license = "MIT"
 [dependencies]
 csv = "1.1.6"
 glob = "0.3.0"
+crossbeam = "0.8.1"
+crossbeam-utils = "*"
 
 [dev-dependencies]
 criterion = "0.3"
+
 
 [[bench]]
 name = "bench_transform"

@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
-use std::fmt::format;
+use std::fmt::{Debug, format, Formatter, Pointer};
 use std::fs::File;
 use std::io::Write;
-use std::path::{MAIN_SEPARATOR, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
+use std::thread;
+use crossbeam::channel::{bounded, unbounded};
+use crossbeam::select;
+use crossbeam_utils::thread::scope;
 
 
 use csv::{Reader, StringRecord};
@@ -59,6 +63,10 @@ pub fn build_json_line(record: HashMap<String, String>, header: StringRecord) ->
 }
 
 pub fn read_data(options: &ApplicationOptions) -> (Vec<HashMap<String, String>>, StringRecord) {
+    if !Path::exists(Path::new(&options.input)) {
+        panic!("{:?}", &options.input);
+    }
+
     let mut rdr = Reader::from_path(&options.input).unwrap();
     let header = rdr.headers().unwrap().clone();
     let data: Vec<HashMap<String, String>> = rdr
@@ -95,11 +103,55 @@ fn to_absolute(option: &ApplicationOptions, path: &PathBuf) -> String {
     let last_with_separator = format!("{}{}", String::from(MAIN_SEPARATOR), String::from(last));
     let prefix = option.input.replace(&last_with_separator, &String::from(""));
     format!(
-        "{prefix}/{}.{}",
+        "{}/{}.{}",
+        prefix,
         path.file_stem().unwrap().to_str().unwrap(),
         path.extension().unwrap().to_str().unwrap(),
     )
 }
+
+
+fn run_files_channel(options: ApplicationOptions) {
+    let mut files_to_process = Vec::new();
+
+    // Prepare data for processing
+    for entry in glob::glob(&options.input).unwrap() {
+        match entry {
+            Ok(path) => {
+                let file_name = path.display();
+                println!("{:?}", file_name);
+
+                let mut patched_options = options.clone();
+                patched_options.input = to_absolute(&patched_options, &path);
+
+                if options.output.is_empty() {
+                    patched_options.output = format!("{}.json", file_name);
+                } else {
+                    patched_options.output = format!("{}/{}.json", options.output, file_name);
+                }
+                files_to_process.push(patched_options)
+            }
+
+            // if the path matched but was unreadable,
+            // thereby preventing its contents from matching
+            Err(e) => println!("{:?}", e),
+        }
+    }
+
+    let (s, r) = crossbeam::channel::unbounded();
+    for e in files_to_process {
+        s.send(e).unwrap()
+    }
+
+    drop(s);
+
+
+    for e in r.try_iter() {
+        println!("{:?}", e);
+        process(e)
+    }
+}
+
 
 fn run_files(options: ApplicationOptions) {
     for entry in glob::glob(&options.input).unwrap() {
@@ -113,15 +165,14 @@ fn run_files(options: ApplicationOptions) {
 
                 if options.output.is_empty() {
                     patched_options.output = format!("{}.json", file_name);
-                }
-                else {
+                } else {
                     patched_options.output = format!("{}/{}.json", options.output, file_name);
                 }
 
                 let (data, header) = read_data(&patched_options);
 
-                run_to_file(data,  header, patched_options)
-            },
+                run_to_file(data, header, patched_options)
+            }
 
             // if the path matched but was unreadable,
             // thereby preventing its contents from matching
@@ -130,17 +181,22 @@ fn run_files(options: ApplicationOptions) {
     }
 }
 
+fn process(options: ApplicationOptions) {
+    let (data, header) = read_data(&options);
+    run_to_file(data, header, options)
+}
+
 pub fn run(options: ApplicationOptions) -> Result<(), Box<dyn Error>> {
     if options.input.contains("*") && options.output == "" {
-        run_files(options.clone())
-    }
-
-    if options.output.is_empty() {
-        let (data, header) = read_data(&options);
-        run_to_stdout(data, header)
+        // run_files(options.clone())
+        run_files_channel(options.clone())
     } else {
-        let (data, header) = read_data(&options);
-        run_to_file(data, header, options)
+        if options.output.is_empty() {
+            let (data, header) = read_data(&options);
+            run_to_stdout(data, header)
+        } else {
+            process(options)
+        }
     }
 
 
@@ -171,6 +227,15 @@ impl Default for ApplicationOptions {
             output: String::from("."),
             quiet: false,
         }
+    }
+}
+
+impl Debug for ApplicationOptions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("")
+            .field(&self.input)
+            .field(&self.output)
+            .finish()
     }
 }
 
