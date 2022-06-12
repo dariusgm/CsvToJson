@@ -12,11 +12,11 @@ pub fn arg_parse(args: Vec<String>) -> Options {
     let quiet: String = String::from("--quiet");
 
     let mut options = Options::default();
-    // assume only input provided
+    // assume only input provided, write to std out
     if args.len() == 2 {
         let input_csv = args[1_usize].clone();
         options.input = input_csv.clone();
-        options.output = input_csv.clone().to_string() + ".json";
+        options.output = String::from("");
         return options;
     }
     for (i, a) in args.iter().enumerate() {
