@@ -53,3 +53,7 @@ In case you want to add features, please make sure `cargo fmt` and `cargo clippy
 # Parallel Execution
 When using globbing, all available cpu are used. In case your files are huge, you may get out of memory errors. 
 You can set the amount of parallel execution with `RAYON_NUM_THREADS=4` where `4` is the number of threads that should be used.
+
+# todos:
+* use clap for argument parsing
+* allow input as list like `csv_to_json --input file1.csv file2.csv` - as the shell may replace the globbing by itself.
