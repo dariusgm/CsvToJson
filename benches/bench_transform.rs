@@ -3,11 +3,9 @@ use std::io::Write;
 
 use criterion::{black_box, Criterion, criterion_group, criterion_main};
 
-use csv_to_json::Options;
-
 const BENCHMARK_PATH: &str = "benchmark.csv";
 
-fn generate_data(records: u8) {
+fn generate_data(records: u16) {
     let mut handler = File::create(BENCHMARK_PATH).unwrap();
     let _ = handler.write_all(String::from("col_1,col_2,co_3,col_4\n").as_bytes());
 
@@ -17,17 +15,11 @@ fn generate_data(records: u8) {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    use csv_to_json::*;
-    generate_data(100);
-
+    generate_data(10000);
 
     let _ = c.bench_function("transform", |b| b.iter(|| {
-        let option = Options {
-            input: String::from(BENCHMARK_PATH),
-            output: String::from("output.json"),
-            ..Options::default()
-        };
-        let _ = run(option);
+        let args = vec!["csv_to_json", "--input", BENCHMARK_PATH];
+        let _ = csv_to_json::run_by_str(args);
         std::fs::remove_file("output.json")
     }));
 }

@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::error::Error;
-
 use std::fs::File;
 use std::io::Write;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use csv::{Reader, StringRecord};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+
 use structs::ApplicationOptions;
 
 mod structs;
@@ -88,7 +89,7 @@ fn run_to_stdout(data: Vec<HashMap<String, String>>, header: StringRecord) {
     }
 }
 
-fn run_to_file(data: Vec<HashMap<String, String>>, header: StringRecord, options: ApplicationOptions) {
+fn run_to_file(data: Vec<HashMap<String, String>>, header: StringRecord, options: &ApplicationOptions) {
     let mut file_handler = File::create(&options.output).unwrap();
     for record in data {
         let line = build_json_line(record, header.clone());
@@ -108,7 +109,6 @@ fn to_absolute(option: &ApplicationOptions, path: &PathBuf) -> String {
         path.extension().unwrap().to_str().unwrap(),
     )
 }
-
 
 fn run_files_channel(options: ApplicationOptions) {
     let mut files_to_process = Vec::new();
@@ -137,66 +137,28 @@ fn run_files_channel(options: ApplicationOptions) {
         }
     }
 
-    let (s, r) = crossbeam::channel::unbounded();
-    for e in files_to_process {
-        s.send(e).unwrap()
-    }
-
-    drop(s);
-
-
-    for e in r.try_iter() {
-        println!("{:?}", e);
-        process(e)
-    }
+    files_to_process.par_iter().for_each(process)
 }
 
-#[cfg(feature = "dead_code")]
-fn run_files(options: ApplicationOptions) {
-    for entry in glob::glob(&options.input).unwrap() {
-        match entry {
-            Ok(path) => {
-                let file_name = path.display();
-                println!("{:?}", file_name);
-
-                let mut patched_options = options.clone();
-                patched_options.input = to_absolute(&options, &path);
-
-                if options.output.is_empty() {
-                    patched_options.output = format!("{}.json", file_name);
-                } else {
-                    patched_options.output = format!("{}/{}.json", options.output, file_name);
-                }
-
-                let (data, header) = read_data(&patched_options);
-
-                run_to_file(data, header, patched_options)
-            }
-
-            // if the path matched but was unreadable,
-            // thereby preventing its contents from matching
-            Err(e) => println!("{:?}", e),
-        }
-    }
-}
-
-fn process(options: ApplicationOptions) {
+fn process(options: &ApplicationOptions) {
     let (data, header) = read_data(&options);
-    run_to_file(data, header, options)
+    run_to_file(data, header, &options)
+}
+
+pub fn run_by_str(args: Vec<&str>) -> Result<(), Box<dyn Error>> {
+    run(args.iter().map(|&x| x.into()).collect())
 }
 
 pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let options = arg_parse(args);
-
-
-    if options.input.contains("*") && options.output.is_empty() {
+    if options.input.contains('*') && options.output.is_empty() {
         // run_files(options.clone())
         run_files_channel(options)
     } else if options.output.is_empty() {
         let (data, header) = read_data(&options);
         run_to_stdout(data, header)
     } else {
-        process(options)
+        process(&options)
     }
     Ok(())
 }
@@ -205,6 +167,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
 mod test {
     use std::assert_eq;
     use std::collections::HashMap;
+
     use csv::StringRecord;
 
     #[test]
