@@ -150,9 +150,9 @@ pub fn run_by_str(args: Vec<&str>) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    println!("{:?}", args);
     let options = arg_parse(args);
-    if options.input.contains('*') && options.output.is_empty() {
-        // run_files(options.clone())
+    if options.input.contains('*') {
         run_files_channel(options)
     } else if options.output.is_empty() {
         let (data, header) = read_data(&options);
