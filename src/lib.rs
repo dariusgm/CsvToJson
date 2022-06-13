@@ -1,17 +1,14 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::OsStr;
-use std::fmt::{Debug, format, Formatter, Pointer};
+
 use std::fs::File;
 use std::io::Write;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
-use std::thread;
-use crossbeam::channel::{bounded, unbounded};
-use crossbeam::select;
-use crossbeam_utils::thread::scope;
-
 
 use csv::{Reader, StringRecord};
+use structs::ApplicationOptions;
+
+mod structs;
 
 pub fn arg_parse(args: Vec<String>) -> ApplicationOptions {
     let input: String = String::from("--input");
@@ -22,10 +19,12 @@ pub fn arg_parse(args: Vec<String>) -> ApplicationOptions {
     // assume only input provided, write to std out
     if args.len() == 2 {
         let input_csv = args[1_usize].clone();
-        options.input = input_csv.clone();
+        options.input = input_csv;
         options.output = String::from("");
         return options;
     }
+
+
     for (i, a) in args.iter().enumerate() {
         if input.eq(a) {
             let input_csv = args[i + 1_usize].clone();
@@ -41,7 +40,7 @@ pub fn arg_parse(args: Vec<String>) -> ApplicationOptions {
             options.quiet = true;
         }
     }
-    return options;
+    options
 }
 
 pub fn build_json_line(record: HashMap<String, String>, header: StringRecord) -> String {
@@ -152,7 +151,7 @@ fn run_files_channel(options: ApplicationOptions) {
     }
 }
 
-
+#[cfg(feature = "dead_code")]
 fn run_files(options: ApplicationOptions) {
     for entry in glob::glob(&options.input).unwrap() {
         match entry {
@@ -186,57 +185,20 @@ fn process(options: ApplicationOptions) {
     run_to_file(data, header, options)
 }
 
-pub fn run(options: ApplicationOptions) -> Result<(), Box<dyn Error>> {
-    if options.input.contains("*") && options.output == "" {
+pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let options = arg_parse(args);
+
+
+    if options.input.contains("*") && options.output.is_empty() {
         // run_files(options.clone())
-        run_files_channel(options.clone())
+        run_files_channel(options)
+    } else if options.output.is_empty() {
+        let (data, header) = read_data(&options);
+        run_to_stdout(data, header)
     } else {
-        if options.output.is_empty() {
-            let (data, header) = read_data(&options);
-            run_to_stdout(data, header)
-        } else {
-            process(options)
-        }
+        process(options)
     }
-
-
     Ok(())
-}
-
-pub struct ApplicationOptions {
-    pub input: String,
-    pub output: String,
-    pub quiet: bool,
-}
-
-impl Clone for ApplicationOptions {
-    fn clone(&self) -> Self {
-        ApplicationOptions {
-            input: self.input.clone(),
-            output: self.output.clone(),
-            quiet: self.quiet.clone(),
-        }
-    }
-}
-
-
-impl Default for ApplicationOptions {
-    fn default() -> Self {
-        Self {
-            input: String::from("*.csv"),
-            output: String::from("."),
-            quiet: false,
-        }
-    }
-}
-
-impl Debug for ApplicationOptions {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("")
-            .field(&self.input)
-            .field(&self.output)
-            .finish()
-    }
 }
 
 #[cfg(test)]
@@ -257,7 +219,7 @@ mod test {
     }
 
     #[test]
-    fn test_buid_json_line_with_doublequotes() {
+    fn test_build_json_line_with_double_quotes() {
         use super::build_json_line;
         let mut data = HashMap::new();
         let mut header = StringRecord::new();
