@@ -1,17 +1,25 @@
 use std::fmt::{Debug, Formatter};
+use clap::Parser;
+use log::info;
 
+#[derive(Parser)]
+#[clap(name = "CsvToJson")]
+#[clap(version = "0.1")]
+#[clap(about = "Converts csv files to json", long_about = None)]
 pub struct ApplicationOptions {
+    #[clap(long, multiple_values = false)]
     pub input: String,
-    pub output: String,
-    pub quiet: bool,
+
+    #[clap(long, value_parser)]
+    pub output: Option<String>,
 }
+
 
 impl Clone for ApplicationOptions {
     fn clone(&self) -> Self {
         ApplicationOptions {
             input: self.input.clone(),
             output: self.output.clone(),
-            quiet: self.quiet.clone(),
         }
     }
 }
@@ -20,12 +28,12 @@ impl Clone for ApplicationOptions {
 impl Default for ApplicationOptions {
     fn default() -> Self {
         Self {
-            input: String::from("*.csv"),
-            output: String::from(""),
-            quiet: false,
+            input: "".to_owned(),
+            output: None,
         }
     }
 }
+
 
 impl Debug for ApplicationOptions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -34,4 +42,15 @@ impl Debug for ApplicationOptions {
             .field(&self.output)
             .finish()
     }
+}
+
+pub fn arg_parse() -> ApplicationOptions {
+    env_logger::init();
+
+    let cli = ApplicationOptions::parse();
+
+    info!("Parsed following arguments: ");
+    info!("input: {:?}", &cli.input);
+    info!("output: {:?}", &cli.output);
+    cli
 }

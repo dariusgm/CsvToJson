@@ -2,47 +2,14 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-use std::path::{MAIN_SEPARATOR, Path, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path};
 
 use csv::{Reader, StringRecord};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
-use structs::ApplicationOptions;
+use parsing::ApplicationOptions;
 
-mod structs;
-
-pub fn arg_parse(args: Vec<String>) -> ApplicationOptions {
-    let input: String = String::from("--input");
-    let output: String = String::from("--output");
-    let quiet: String = String::from("--quiet");
-
-    let mut options = ApplicationOptions::default();
-    // assume only input provided, write to std out
-    if args.len() == 2 {
-        let input_csv = args[1_usize].clone();
-        options.input = input_csv;
-        options.output = String::from("");
-        return options;
-    }
-
-
-    for (i, a) in args.iter().enumerate() {
-        if input.eq(a) {
-            let input_csv = args[i + 1_usize].clone();
-            options.input = input_csv;
-        }
-
-        if output.eq(a) {
-            let output_json = args[i + 1_usize].clone();
-            options.output = output_json;
-        }
-
-        if quiet.eq(a) {
-            options.quiet = true;
-        }
-    }
-    options
-}
+mod parsing;
 
 pub fn build_json_line(record: HashMap<String, String>, header: StringRecord) -> String {
     let mut line = "{".to_string();
@@ -50,9 +17,9 @@ pub fn build_json_line(record: HashMap<String, String>, header: StringRecord) ->
     for h in &header {
         let value = (record.get(h).unwrap()).to_string();
         line.push('"');
-        line.push_str(&h.replace("\"", "\\\""));
+        line.push_str(&h.replace('\"', "\\\""));
         line.push_str("\":\"");
-        line.push_str(&value.replace("\"", "\\\""));
+        line.push_str(&value.replace('\"', "\\\""));
         line.push_str("\",");
     }
 
@@ -90,7 +57,9 @@ fn run_to_stdout(data: Vec<HashMap<String, String>>, header: StringRecord) {
 }
 
 fn run_to_file(data: Vec<HashMap<String, String>>, header: StringRecord, options: &ApplicationOptions) {
-    let mut file_handler = File::create(&options.output).unwrap();
+    let o = options.clone();
+    let output = o.output.unwrap();
+    let mut file_handler = File::create(output).unwrap();
     for record in data {
         let line = build_json_line(record, header.clone());
         let b = line.as_bytes();
@@ -98,7 +67,7 @@ fn run_to_file(data: Vec<HashMap<String, String>>, header: StringRecord, options
     }
 }
 
-fn to_absolute(option: &ApplicationOptions, path: &PathBuf) -> String {
+fn to_absolute(option: &ApplicationOptions, path: &Path) -> String {
     let last = option.input.split(MAIN_SEPARATOR).last().unwrap();
     let last_with_separator = format!("{}{}", String::from(MAIN_SEPARATOR), String::from(last));
     let prefix = option.input.replace(&last_with_separator, &String::from(""));
@@ -110,7 +79,7 @@ fn to_absolute(option: &ApplicationOptions, path: &PathBuf) -> String {
     )
 }
 
-fn run_files_channel(options: ApplicationOptions) {
+fn run_files_channel(options: &ApplicationOptions) {
     let mut files_to_process = Vec::new();
 
     // Prepare data for processing
@@ -123,11 +92,11 @@ fn run_files_channel(options: ApplicationOptions) {
                 let mut patched_options = options.clone();
                 patched_options.input = to_absolute(&patched_options, &path);
 
-                if options.output.is_empty() {
-                    patched_options.output = format!("{}.json", file_name);
-                } else {
-                    patched_options.output = format!("{}/{}.json", options.output, file_name);
+                match &options.output {
+                    None => patched_options.output = Some(format!("{}.json", file_name)),
+                    Some(x) => patched_options.output = Some(format!("{}/{}.json", x, file_name))
                 }
+
                 files_to_process.push(patched_options)
             }
 
@@ -141,8 +110,8 @@ fn run_files_channel(options: ApplicationOptions) {
 }
 
 fn process(options: &ApplicationOptions) {
-    let (data, header) = read_data(&options);
-    run_to_file(data, header, &options)
+    let (data, header) = read_data(options);
+    run_to_file(data, header, options)
 }
 
 pub fn run_by_str(args: Vec<&str>) -> Result<(), Box<dyn Error>> {
@@ -151,15 +120,14 @@ pub fn run_by_str(args: Vec<&str>) -> Result<(), Box<dyn Error>> {
 
 pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     println!("{:?}", args);
-    let options = arg_parse(args);
-    if options.input.contains('*') {
-        run_files_channel(options)
-    } else if options.output.is_empty() {
-        let (data, header) = read_data(&options);
-        run_to_stdout(data, header)
-    } else {
-        process(&options)
-    }
+    let options = parsing::arg_parse();
+        match &options.output {
+            Some(_x) => run_files_channel(&options),
+            None => {
+                let (data, header) = read_data(&options);
+                run_to_stdout(data, header)
+            }
+        }
     Ok(())
 }
 
