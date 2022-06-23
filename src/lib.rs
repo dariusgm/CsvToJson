@@ -11,60 +11,36 @@ use parsing::ApplicationOptions;
 
 mod parsing;
 
-pub fn build_json_line(record: HashMap<String, String>, header: StringRecord) -> String {
-    let mut line = "{".to_string();
-    // consistent key order
-    for h in &header {
-        let value = (record.get(h).unwrap()).to_string();
-        line.push('"');
-        line.push_str(&h.replace('\"', "\\\""));
-        line.push_str("\":\"");
-        line.push_str(&value.replace('\"', "\\\""));
-        line.push_str("\",");
-    }
-
-    // remove last comma
-    let mut a = line[0..line.len() - 1].to_string();
-    a.push_str("}\n");
-    a
-}
-
-pub fn read_data(options: &ApplicationOptions) -> (Vec<HashMap<String, String>>, StringRecord) {
+pub fn convert_data(options: &ApplicationOptions) {
     if !Path::exists(Path::new(&options.input)) {
         panic!("{:?}", &options.input);
     }
 
     let mut rdr = Reader::from_path(&options.input).unwrap();
-    let header = rdr.headers().unwrap().clone();
-    let data: Vec<HashMap<String, String>> = rdr
-        .records()
-        .map(|record| {
-            Ok(header
-                .iter()
-                .map(|e| e.to_string())
-                .zip(record?.iter().map(String::from))
-                .collect())
-        })
-        .collect::<Result<_, Box<dyn Error>>>().unwrap();
-    (data, header)
-}
+    let headers: Vec<String> = rdr.headers()
+        .unwrap()
+        .iter()
+        .map(|s| String::from(s).replace('\"', "\\\""))
+        .collect();
 
-fn run_to_stdout(data: Vec<HashMap<String, String>>, header: StringRecord) {
-    for record in data {
-        let line = build_json_line(record, header.clone());
-        print!("{}", line)
-    }
-}
+    rdr.records().for_each(|optional_record| {
+        for record in optional_record {
+            let mut line = "{".to_owned();
+            headers.iter().enumerate().for_each(|(i, h)| {
+                let value = (record.get(i).unwrap()).to_string();
+                line.push('"');
+                line.push_str(&h);
+                line.push_str("\":\"");
+                line.push_str(&value.replace('\"', "\\\""));
+                line.push_str("\",");
+            });
 
-fn run_to_file(data: Vec<HashMap<String, String>>, header: StringRecord, options: &ApplicationOptions) {
-    let o = options.clone();
-    let output = o.output.unwrap();
-    let mut file_handler = File::create(output).unwrap();
-    for record in data {
-        let line = build_json_line(record, header.clone());
-        let b = line.as_bytes();
-        file_handler.write_all(b).unwrap();
-    }
+
+            let mut a = line[0..line.len() - 1].to_string();
+            a.push_str("}\n");
+            println!("{:?}", a)
+        }
+    });
 }
 
 fn to_absolute(option: &ApplicationOptions, path: &Path) -> String {
@@ -78,7 +54,7 @@ fn to_absolute(option: &ApplicationOptions, path: &Path) -> String {
         path.extension().unwrap().to_str().unwrap(),
     )
 }
-
+/*
 fn run_files_channel(options: &ApplicationOptions) {
     let mut files_to_process = Vec::new();
 
@@ -108,12 +84,7 @@ fn run_files_channel(options: &ApplicationOptions) {
 
     files_to_process.par_iter().for_each(process)
 }
-
-fn process(options: &ApplicationOptions) {
-    let (data, header) = read_data(options);
-    run_to_file(data, header, options)
-}
-
+*/
 pub fn run_by_str(args: Vec<&str>) -> Result<(), Box<dyn Error>> {
     run(args.iter().map(|&x| x.into()).collect())
 }
@@ -122,11 +93,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     println!("{:?}", args);
     let options = parsing::arg_parse();
         match &options.output {
-            Some(_x) => run_files_channel(&options),
-            None => {
-                let (data, header) = read_data(&options);
-                run_to_stdout(data, header)
-            }
+            _ => { convert_data(&options);}
         }
     Ok(())
 }
