@@ -5,11 +5,30 @@ use std::io::Write;
 use std::path::{MAIN_SEPARATOR, Path};
 
 use csv::{Reader, StringRecord};
+use log::{error, Record};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use parsing::ApplicationOptions;
 
 mod parsing;
+
+
+pub fn convert_line(headers: &Vec<String>, record: &StringRecord) -> String {
+    let mut line = "{".to_owned();
+    headers.iter().enumerate().for_each(|(i, h)| {
+        let value = (record.get(i).unwrap()).to_string();
+        line.push('"');
+        line.push_str(&h);
+        line.push_str("\":\"");
+        line.push_str(&value.replace('\"', "\\\""));
+        line.push_str("\",");
+    });
+
+
+    let mut a = line[0..line.len() - 1].to_string();
+    a.push_str("}\n");
+    a
+}
 
 pub fn convert_data(options: &ApplicationOptions) {
     if !Path::exists(Path::new(&options.input)) {
@@ -23,25 +42,29 @@ pub fn convert_data(options: &ApplicationOptions) {
         .map(|s| String::from(s).replace('\"', "\\\""))
         .collect();
 
+    let out_file = match &options.output {
+        Some(x) => match File::create(x) {
+            Ok(t) => Some(t),
+            Err(e) => {
+                error!("Could not create file, writing to stdout");
+                error!("{}", e);
+                None
+            }
+        },
+        None => None
+    };
+
     rdr.records().for_each(|optional_record| {
         for record in optional_record {
-            let mut line = "{".to_owned();
-            headers.iter().enumerate().for_each(|(i, h)| {
-                let value = (record.get(i).unwrap()).to_string();
-                line.push('"');
-                line.push_str(&h);
-                line.push_str("\":\"");
-                line.push_str(&value.replace('\"', "\\\""));
-                line.push_str("\",");
-            });
-
-
-            let mut a = line[0..line.len() - 1].to_string();
-            a.push_str("}\n");
-            println!("{:?}", a)
+            let converted_line_output = convert_line(&headers, &record);
+            match out_file {
+                // Some(mut f) => f.write_all(&converted_line_output.as_bytes()),
+                _ => println!("{}", &converted_line_output)
+            }
         }
     });
 }
+
 
 fn to_absolute(option: &ApplicationOptions, path: &Path) -> String {
     let last = option.input.split(MAIN_SEPARATOR).last().unwrap();
@@ -96,34 +119,4 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
             _ => { convert_data(&options);}
         }
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use std::assert_eq;
-    use std::collections::HashMap;
-
-    use csv::StringRecord;
-
-    #[test]
-    fn test_build_json_line() {
-        use super::build_json_line;
-        let mut data = HashMap::new();
-        let mut header = StringRecord::new();
-        header.push_field("test-key");
-        data.insert(String::from("test-key"), String::from("test-value"));
-        let json = build_json_line(data, header);
-        assert_eq!(json, "{\"test-key\":\"test-value\"}\n")
-    }
-
-    #[test]
-    fn test_build_json_line_with_double_quotes() {
-        use super::build_json_line;
-        let mut data = HashMap::new();
-        let mut header = StringRecord::new();
-        header.push_field("test-key");
-        data.insert(String::from("test-key"), String::from("test\"-value"));
-        let json = build_json_line(data, header);
-        assert_eq!(json, "{\"test-key\":\"test\\\"-value\"}\n")
-    }
 }
