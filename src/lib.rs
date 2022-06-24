@@ -30,6 +30,31 @@ pub fn convert_line(headers: &Vec<String>, record: &StringRecord) -> String {
     a
 }
 
+pub fn file_handler(output: &Option<String>) -> bool {
+    match output {
+        Some(x) => true,
+        None => false
+    }
+}
+
+pub fn write_to_file(mut rdr: Reader<File>, headers: &Vec<String>, output: String) {
+    let mut file_handler = File::create(output).unwrap();
+    rdr.records().for_each(|optional_record| {
+        for record in optional_record {
+            let converted_line_output = convert_line(&headers, &record);
+            let _ = file_handler.write_all(&converted_line_output.as_bytes());
+        }
+    });
+}
+
+pub fn write_to_stdout(mut rdr: Reader<File>, headers: &Vec<String>) {
+    rdr.records().for_each(|optional_record| {
+        for record in optional_record {
+            let converted_line_output = convert_line(&headers, &record);
+            println!("{}", converted_line_output);
+        }
+    });
+}
 pub fn convert_data(options: &ApplicationOptions) {
     if !Path::exists(Path::new(&options.input)) {
         panic!("{:?}", &options.input);
@@ -42,27 +67,12 @@ pub fn convert_data(options: &ApplicationOptions) {
         .map(|s| String::from(s).replace('\"', "\\\""))
         .collect();
 
-    let out_file = match &options.output {
-        Some(x) => match File::create(x) {
-            Ok(t) => Some(t),
-            Err(e) => {
-                error!("Could not create file, writing to stdout");
-                error!("{}", e);
-                None
-            }
-        },
-        None => None
-    };
-
-    rdr.records().for_each(|optional_record| {
-        for record in optional_record {
-            let converted_line_output = convert_line(&headers, &record);
-            match out_file {
-                // Some(mut f) => f.write_all(&converted_line_output.as_bytes()),
-                _ => println!("{}", &converted_line_output)
-            }
-        }
-    });
+    let out_file = file_handler(&options.output.clone());
+    if out_file {
+        write_to_file(rdr, &headers, options.output.clone().unwrap())
+    } else {
+        write_to_stdout(rdr, &headers)
+    }
 }
 
 
