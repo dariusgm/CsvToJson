@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::path::{MAIN_SEPARATOR, Path};
 
 use csv::{Reader, StringRecord};
-use log::{error, Record};
+
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use parsing::ApplicationOptions;
@@ -31,10 +31,7 @@ pub fn convert_line(headers: &Vec<String>, record: &StringRecord) -> String {
 }
 
 pub fn file_handler(output: &Option<String>) -> bool {
-    match output {
-        Some(x) => true,
-        None => false
-    }
+    output.is_some()
 }
 
 pub fn write_to_file(mut rdr: Reader<File>, headers: &Vec<String>, output: String) {
@@ -42,7 +39,7 @@ pub fn write_to_file(mut rdr: Reader<File>, headers: &Vec<String>, output: Strin
     rdr.records().for_each(|optional_record| {
         for record in optional_record {
             let converted_line_output = convert_line(&headers, &record);
-            let _ = file_handler.write_all(&converted_line_output.as_bytes());
+            let _ = file_handler.write_all(converted_line_output.as_bytes());
         }
     });
 }
@@ -55,6 +52,7 @@ pub fn write_to_stdout(mut rdr: Reader<File>, headers: &Vec<String>) {
         }
     });
 }
+
 pub fn convert_data(options: &ApplicationOptions) {
     if !Path::exists(Path::new(&options.input)) {
         panic!("{:?}", &options.input);
@@ -67,8 +65,7 @@ pub fn convert_data(options: &ApplicationOptions) {
         .map(|s| String::from(s).replace('\"', "\\\""))
         .collect();
 
-    let out_file = file_handler(&options.output.clone());
-    if out_file {
+    if options.output.is_some() {
         write_to_file(rdr, &headers, options.output.clone().unwrap())
     } else {
         write_to_stdout(rdr, &headers)
@@ -125,8 +122,6 @@ pub fn run_by_str(args: Vec<&str>) -> Result<(), Box<dyn Error>> {
 pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     println!("{:?}", args);
     let options = parsing::arg_parse();
-        match &options.output {
-            _ => { convert_data(&options);}
-        }
+    { convert_data(&options); }
     Ok(())
 }
