@@ -7,8 +7,8 @@ use log::info;
 #[clap(version = "0.1")]
 #[clap(about = "Converts csv files to json", long_about = None)]
 pub struct ApplicationOptions {
-    #[clap(long, multiple_values = false)]
-    pub input: String,
+    #[clap(long, multiple_values = true)]
+    pub input: Vec<String>,
 
     #[clap(long, value_parser)]
     pub output: Option<String>,
@@ -28,7 +28,7 @@ impl Clone for ApplicationOptions {
 impl Default for ApplicationOptions {
     fn default() -> Self {
         Self {
-            input: "".to_owned(),
+            input: vec!["".to_owned()],
             output: None,
         }
     }
