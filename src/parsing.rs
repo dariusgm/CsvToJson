@@ -1,18 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use clap::Parser;
 use log::info;
-
-#[derive(Parser)]
-#[clap(name = "CsvToJson")]
-#[clap(version = "0.1")]
-#[clap(about = "Converts csv files to json", long_about = None)]
-pub struct ApplicationOptions {
-    #[clap(long, multiple_values = true)]
-    pub input: Vec<String>,
-
-    #[clap(long, value_parser)]
-    pub output: Option<String>,
-}
+use crate::ApplicationOptions;
 
 
 impl Clone for ApplicationOptions {

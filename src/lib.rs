@@ -1,5 +1,6 @@
 
 use std::error::Error;
+use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::{MAIN_SEPARATOR, Path};
@@ -7,10 +8,22 @@ use std::path::{MAIN_SEPARATOR, Path};
 use csv::{Reader, StringRecord};
 
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-
-use parsing::ApplicationOptions;
+use clap::Parser;
+use crate::parsing::arg_parse;
 
 mod parsing;
+
+#[derive(Parser)]
+#[clap(name = "CsvToJson")]
+#[clap(version = "0.1")]
+#[clap(about = "Converts csv files to json", long_about = None)]
+pub struct ApplicationOptions {
+    #[clap(long, multiple_values = true)]
+    pub input: Vec<String>,
+
+    #[clap(long, value_parser)]
+    pub output: Option<String>,
+}
 
 #[derive(Debug)]
 pub struct ProcessingUnit {
@@ -24,7 +37,7 @@ pub fn convert_line(headers: &Vec<String>, record: &StringRecord) -> String {
     headers.iter().enumerate().for_each(|(i, h)| {
         let value = (record.get(i).unwrap()).to_string();
         line.push('"');
-        line.push_str(&h);
+        line.push_str(h);
         line.push_str("\":\"");
         line.push_str(&value.replace('\"', "\\\""));
         line.push_str("\",");
@@ -67,7 +80,19 @@ pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
                     let input = to_absolute(file_name.to_string(), &path);
                     let output = match &options.output {
                         None => format!("{}.json", file_name),
-                        Some(x) => format!("{}/{}.json", x, file_name)
+                        Some(x) => {
+                            match argument.contains('*') {
+                                // handle as directory for output
+                                true => {
+                                    fs::create_dir_all(x).unwrap();
+                                    to_absolute(file_name.to_string(), Path::new(&x))
+                                },
+                                // handle as file
+                                false => {
+                                    x.to_string()
+                                }
+                            }
+                        }
                     };
 
 
@@ -117,14 +142,13 @@ fn to_absolute(input: String, path: &Path) -> String {
     )
 }
 
-pub fn run_by_str(args: Vec<&str>) -> Result<(), Box<dyn Error>> {
-    run(args.iter().map(|&x| x.into()).collect())
-}
-
-pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
-    println!("{:?}", args);
-    let options = parsing::arg_parse();
-    let files = collect_files(&options);
+pub fn run_by_option(options: &ApplicationOptions) -> Result<(), Box<dyn Error>> {
+    let files = collect_files(options);
     files.par_iter().for_each(convert_data);
     Ok(())
+}
+
+pub fn run() -> Result<(), Box<dyn Error>> {
+    let options: ApplicationOptions = arg_parse();
+    run_by_option(&options)
 }
