@@ -32,7 +32,7 @@ pub struct ProcessingUnit {
 }
 
 
-pub fn convert_line(headers: &Vec<String>, record: &StringRecord) -> String {
+pub fn convert_line(headers: &[String], record: &StringRecord) -> String {
     let mut line = "{".to_owned();
     headers.iter().enumerate().for_each(|(i, h)| {
         let value = (record.get(i).unwrap()).to_string();
@@ -49,17 +49,17 @@ pub fn convert_line(headers: &Vec<String>, record: &StringRecord) -> String {
     a
 }
 
-pub fn write_to_file(mut rdr: Reader<File>, headers: &Vec<String>, output: &String) {
+pub fn write_to_file(mut rdr: Reader<File>, headers: &[String], output: &String) {
     let mut file_handler = File::create(output).unwrap();
     rdr.records().for_each(|optional_record| {
-        for record in optional_record {
-            let converted_line_output = convert_line(&headers, &record);
+        if let Ok(record) = optional_record {
+            let converted_line_output = convert_line(headers, &record);
             let _ = file_handler.write_all(converted_line_output.as_bytes());
         }
     });
 }
 
-pub fn write_to_stdout(mut rdr: Reader<File>, headers: &Vec<String>) {
+pub fn write_to_stdout(mut rdr: Reader<File>, headers: &[String]) {
     rdr.records().for_each(|optional_record| {
         let record = optional_record.unwrap();
         let converted_line_output = convert_line(headers, &record);
@@ -84,8 +84,13 @@ pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
                             match argument.contains('*') {
                                 // handle as directory for output
                                 true => {
-                                    fs::create_dir_all(x).unwrap();
-                                    to_absolute(file_name.to_string(), Path::new(&x))
+                                    let path_str = format!("{}{}{}", x,MAIN_SEPARATOR, file_name);
+                                    let last = input.split(MAIN_SEPARATOR).last().unwrap();
+                                    let prefix = path_str.replace(last, "");
+                                    // create required directory structure in case of globbing
+                                    let full_output_path = Path::new(&prefix);
+                                    fs::create_dir_all(full_output_path).unwrap();
+                                    format!("{}.json", path_str)
                                 },
                                 // handle as file
                                 false => {

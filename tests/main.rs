@@ -24,7 +24,7 @@ fn test_input_output() {
     match r {
         Ok(_t) => {
             let content = fs::read_to_string("tests/test.json").unwrap();
-            assert_eq!(content, "{\"header_1\":\"Value_1\",\"header2\":\"value_2\"}\n");
+            assert_eq!(content, "{\"header_1\":\"Value_1\",\"header_2\":\"value_2\"}\n");
             fs::remove_file("tests/test.json").unwrap();
         }
         _ => assert_eq!(false, true)
@@ -41,8 +41,8 @@ fn test_input_by_globbing() {
     match r {
         Ok(_t) => {
             let content = fs::read_to_string("output/tests/test.csv.json").unwrap();
-            assert_eq!(content, "{\"header_1\":\"Value_1\",\"header2\":\"value_2\"}\n");
-            fs::remove_file("tests/test.csv.json").unwrap();
+            assert_eq!(content, "{\"header_1\":\"Value_1\",\"header_2\":\"value_2\"}\n");
+            fs::remove_dir_all("output").unwrap();
         }
         _ => assert_eq!(false, true)
     }
@@ -58,7 +58,7 @@ fn test_input_output_by_globbing() {
     match r {
         Ok(_t) => {
             let content = fs::read_to_string("tests/test.csv.json").unwrap();
-            assert_eq!(content, "{\"header_1\":\"Value_1\",\"header2\":\"value_2\"}\n");
+            assert_eq!(content, "{\"header_1\":\"Value_1\",\"header_2\":\"value_2\"}\n");
             fs::remove_file("tests/test.csv.json").unwrap();
         }
         _ => assert_eq!(false, true)
