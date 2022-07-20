@@ -50,20 +50,22 @@ pub fn convert_line(headers: &[String], record: &StringRecord) -> String {
 }
 
 pub fn write_to_file(mut rdr: Reader<File>, headers: &[String], output: &String) {
-    let mut file_handler = File::create(output).unwrap();
-    rdr.records().for_each(|optional_record| {
-        if let Ok(record) = optional_record {
-            let converted_line_output = convert_line(headers, &record);
-            let _ = file_handler.write_all(converted_line_output.as_bytes());
-        }
-    });
+    if let Ok(mut file_handler) = File::create(output) {
+        rdr.records().for_each(|optional_record| {
+            if let Ok(record) = optional_record {
+                let converted_line_output = convert_line(headers, &record);
+                let _ = file_handler.write_all(converted_line_output.as_bytes());
+            }
+        });
+    }
 }
 
 pub fn write_to_stdout(mut rdr: Reader<File>, headers: &[String]) {
     rdr.records().for_each(|optional_record| {
-        let record = optional_record.unwrap();
-        let converted_line_output = convert_line(headers, &record);
-        println!("{}", converted_line_output);
+        if let Ok(record) = optional_record {
+            let converted_line_output = convert_line(headers, &record);
+            println!("{}", converted_line_output);
+        }
     });
 }
 
@@ -74,8 +76,8 @@ pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
         for entry in glob::glob(argument).unwrap() {
             match entry {
                 Ok(path) => {
+
                     let file_name = path.display();
-                    // println!("{:?}", file_name);
 
                     let input = to_absolute(file_name.to_string(), &path);
                     let output = match &options.output {
