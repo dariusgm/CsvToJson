@@ -1,5 +1,6 @@
-
+use std::borrow::Borrow;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -69,6 +70,31 @@ pub fn write_to_stdout(mut rdr: Reader<File>, headers: &[String]) {
     });
 }
 
+fn build_output_path(output: &Option<String>, input: &str, argument: &str, file_name: &OsStr) -> String {
+    let file_name_str  = file_name.to_str().unwrap();
+    match output {
+        None => format!("{}.json", file_name_str),
+        Some(x) => {
+            match argument.contains('*') {
+                // handle as directory for output
+                true => {
+                    let path_str = format!("{}{}{}", x, MAIN_SEPARATOR, file_name_str);
+                    let last = input.split(MAIN_SEPARATOR).last().unwrap();
+                    let prefix = path_str.replace(last, "");
+                    // create required directory structure in case of globbing
+                    let full_output_path = Path::new(&prefix);
+                    fs::create_dir_all(full_output_path).unwrap();
+                    format!("{}.json", path_str)
+                },
+                // handle as file
+                false => {
+                    x.to_string()
+                }
+            }
+        }
+    }
+}
+
 pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
     let mut files_to_process = Vec::new();
 
@@ -76,39 +102,23 @@ pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
         for entry in glob::glob(argument).unwrap() {
             match entry {
                 Ok(path) => {
-
-                    let file_name = path.display();
-
-                    let input = to_absolute(file_name.to_string(), &path);
-                    let output = match &options.output {
-                        None => format!("{}.json", file_name),
-                        Some(x) => {
-                            match argument.contains('*') {
-                                // handle as directory for output
-                                true => {
-                                    let path_str = format!("{}{}{}", x,MAIN_SEPARATOR, file_name);
-                                    let last = input.split(MAIN_SEPARATOR).last().unwrap();
-                                    let prefix = path_str.replace(last, "");
-                                    // create required directory structure in case of globbing
-                                    let full_output_path = Path::new(&prefix);
-                                    fs::create_dir_all(full_output_path).unwrap();
-                                    format!("{}.json", path_str)
-                                },
-                                // handle as file
-                                false => {
-                                    x.to_string()
-                                }
-                            }
-                        }
-                    };
+                    if let Some(file_name) = path.file_name() {
+                        let input = to_absolute(file_name, &path);
+                        let output = build_output_path(
+                            options.output.borrow(),
+                            &input,
+                            &argument,
+                            file_name,
+                        );
 
 
-                    let processing_unit = ProcessingUnit {
-                        input,
-                        output
-                    };
+                        let processing_unit = ProcessingUnit {
+                            input,
+                            output
+                        };
 
-                    files_to_process.push(processing_unit)
+                        files_to_process.push(processing_unit)
+                    }
                 }
 
                 // if the path matched but was unreadable,
@@ -137,10 +147,12 @@ pub fn convert_data(processing_unit: &ProcessingUnit) {
 }
 
 
-fn to_absolute(input: String, path: &Path) -> String {
-    let last = input.split(MAIN_SEPARATOR).last().unwrap();
+fn to_absolute(input: &OsStr, path: &Path) -> String {
+    
+    let input_str = input.to_str().unwrap();
+    let last = input_str.split(MAIN_SEPARATOR).last().unwrap();
     let last_with_separator = format!("{}{}", String::from(MAIN_SEPARATOR), String::from(last));
-    let prefix = input.replace(&last_with_separator, &String::from(""));
+    let prefix = input_str.replace(&last_with_separator, &String::from(""));
     format!(
         "{}/{}.{}",
         prefix,
