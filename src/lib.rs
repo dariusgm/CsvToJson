@@ -1,10 +1,12 @@
 use std::borrow::Borrow;
+
 use std::error::Error;
+use std::string::String;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::path::{MAIN_SEPARATOR, Path};
+use std::path::{Path, PathBuf};
 
 use csv::{Reader, StringRecord};
 
@@ -28,8 +30,8 @@ pub struct ApplicationOptions {
 
 #[derive(Debug)]
 pub struct ProcessingUnit {
-    input: String,
-    output: String
+    input: PathBuf,
+    output: PathBuf
 }
 
 
@@ -50,7 +52,7 @@ pub fn convert_line(headers: &[String], record: &StringRecord) -> String {
     a
 }
 
-pub fn write_to_file(mut rdr: Reader<File>, headers: &[String], output: &String) {
+pub fn write_to_file(mut rdr: Reader<File>, headers: &[String], output: &PathBuf) {
     if let Ok(mut file_handler) = File::create(output) {
         rdr.records().for_each(|optional_record| {
             if let Ok(record) = optional_record {
@@ -70,25 +72,35 @@ pub fn write_to_stdout(mut rdr: Reader<File>, headers: &[String]) {
     });
 }
 
-fn build_output_path(output: &Option<String>, input: &str, argument: &str, file_name: &OsStr) -> String {
+fn build_output_path(output: &Option<String>, input: &PathBuf, argument: &str, file_name: &OsStr) -> PathBuf {
     let file_name_str  = file_name.to_str().unwrap();
     match output {
-        None => format!("{}.json", file_name_str),
+        None => PathBuf::from(format!("{}.json", file_name_str)),
         Some(x) => {
             match argument.contains('*') {
                 // handle as directory for output
                 true => {
-                    let path_str = format!("{}{}{}", x, MAIN_SEPARATOR, file_name_str);
-                    let last = input.split(MAIN_SEPARATOR).last().unwrap();
-                    let prefix = path_str.replace(last, "");
-                    // create required directory structure in case of globbing
-                    let full_output_path = Path::new(&prefix);
-                    fs::create_dir_all(full_output_path).unwrap();
-                    format!("{}.json", path_str)
+                    let mut output_directory = PathBuf::from(x);
+
+
+                    let elements = input.iter();
+                    let size = input.iter().count();
+                    for (index , part) in elements.enumerate() {
+                        if index as i32 - 2 < size  as i32 {
+                            output_directory.push(part)
+                        }
+                    }
+
+                    fs::create_dir_all(&output_directory).unwrap();
+                    let mut last = input.iter().last().unwrap().to_os_string();
+                    last.push(".json");
+                    output_directory.push(last);
+
+                    output_directory
                 },
                 // handle as file
                 false => {
-                    x.to_string()
+                    PathBuf::from(x)
                 }
             }
         }
@@ -101,13 +113,12 @@ pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
     for argument in &options.input {
         for entry in glob::glob(argument).unwrap() {
             match entry {
-                Ok(path) => {
-                    if let Some(file_name) = path.file_name() {
-                        let input = to_absolute(file_name, &path);
+                Ok(input) => {
+                    if let Some(file_name) = input.file_name() {
                         let output = build_output_path(
                             options.output.borrow(),
                             &input,
-                            &argument,
+                            argument,
                             file_name,
                         );
 
@@ -146,20 +157,6 @@ pub fn convert_data(processing_unit: &ProcessingUnit) {
 
 }
 
-
-fn to_absolute(input: &OsStr, path: &Path) -> String {
-    
-    let input_str = input.to_str().unwrap();
-    let last = input_str.split(MAIN_SEPARATOR).last().unwrap();
-    let last_with_separator = format!("{}{}", String::from(MAIN_SEPARATOR), String::from(last));
-    let prefix = input_str.replace(&last_with_separator, &String::from(""));
-    format!(
-        "{}/{}.{}",
-        prefix,
-        path.file_stem().unwrap().to_str().unwrap(),
-        path.extension().unwrap().to_str().unwrap(),
-    )
-}
 
 pub fn run_by_option(options: &ApplicationOptions) -> Result<(), Box<dyn Error>> {
     let files = collect_files(options);
