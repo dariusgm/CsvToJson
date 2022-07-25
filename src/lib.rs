@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 
 use std::error::Error;
 use std::string::String;
-use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -72,40 +71,39 @@ pub fn write_to_stdout(mut rdr: Reader<File>, headers: &[String]) {
     });
 }
 
-fn build_output_path(output: &Option<String>, input: &PathBuf, argument: &str, file_name: &OsStr) -> PathBuf {
-    let file_name_str  = file_name.to_str().unwrap();
-    match output {
-        None => PathBuf::from(format!("{}.json", file_name_str)),
-        Some(x) => {
-            match argument.contains('*') {
-                // handle as directory for output
-                true => {
-                    let mut output_directory = PathBuf::from(x);
-                    let elements = input.iter();
-                    let size = input.iter().count();
-                    for (index , part) in elements.enumerate() {
-                        let casted_index = index as i32;
-                        let casted_size = size as i32 - 1;
-                        if casted_index < casted_size {
-                            output_directory.push(part)
-                        }
-                    }
-
-                    fs::create_dir_all(&output_directory).unwrap();
-                    let mut last = input.iter().last().unwrap().to_os_string();
-                    last.push(".json");
-                    output_directory.push(last);
-
-                    output_directory
-                },
-                // handle as file
-                false => {
-                    PathBuf::from(x)
-                }
+fn build_output_path(output: &Option<String>, input: &PathBuf) -> PathBuf {
+    let mut output_directory = match output {
+        None => PathBuf::new(),
+        Some(o) => {
+            let x = PathBuf::from(o);
+            if x.to_string_lossy().contains(".json") {
+                // explicit path, we assume a file - use it directly
+                return x
+            } else {
+                // base directory for processing
+                x
             }
         }
+    };
+
+    let elements = input.iter();
+    let size = input.iter().count();
+    for (index , part) in elements.enumerate() {
+        let casted_index = index as i32;
+        let casted_size = size as i32 - 1;
+        if casted_index < casted_size {
+            output_directory.push(part)
+        }
     }
+
+    fs::create_dir_all(&output_directory).unwrap();
+    let mut last = input.iter().last().unwrap().to_os_string();
+    last.push(".json");
+    output_directory.push(last);
+
+    output_directory
 }
+
 
 pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
     let mut files_to_process = Vec::new();
@@ -114,24 +112,18 @@ pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
         for entry in glob::glob(argument).unwrap() {
             match entry {
                 Ok(input) => {
-                    if let Some(file_name) = input.file_name() {
-                        let output = build_output_path(
-                            options.output.borrow(),
-                            &input,
-                            argument,
-                            file_name,
-                        );
+                    let output = build_output_path(
+                        options.output.borrow(),
+                        &input
+                    );
 
+                    let processing_unit = ProcessingUnit {
+                        input,
+                        output
+                    };
 
-                        let processing_unit = ProcessingUnit {
-                            input,
-                            output
-                        };
-
-                        files_to_process.push(processing_unit)
-                    }
-                }
-
+                    files_to_process.push(processing_unit)
+                },
                 // if the path matched but was unreadable,
                 // thereby preventing its contents from matching
                 Err(e) => println!("{:?}", e),
@@ -154,7 +146,6 @@ pub fn convert_data(processing_unit: &ProcessingUnit) {
         .collect();
 
     write_to_file(rdr, &headers, &processing_unit.output)
-
 }
 
 
