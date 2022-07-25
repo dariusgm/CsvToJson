@@ -81,12 +81,12 @@ fn build_output_path(output: &Option<String>, input: &PathBuf, argument: &str, f
                 // handle as directory for output
                 true => {
                     let mut output_directory = PathBuf::from(x);
-
-
                     let elements = input.iter();
                     let size = input.iter().count();
                     for (index , part) in elements.enumerate() {
-                        if index as i32 - 2 < size  as i32 {
+                        let casted_index = index as i32;
+                        let casted_size = size as i32 - 1;
+                        if casted_index < casted_size {
                             output_directory.push(part)
                         }
                     }
