@@ -71,7 +71,7 @@ pub fn write_to_stdout(mut rdr: Reader<File>, headers: &[String]) {
     });
 }
 
-fn build_output_path(output: &Option<String>, input: &PathBuf) -> PathBuf {
+fn build_output_path(output: &Option<String>, input: &Path) -> PathBuf {
     let mut output_directory = match output {
         None => PathBuf::new(),
         Some(o) => {
