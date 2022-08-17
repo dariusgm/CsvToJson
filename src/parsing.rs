@@ -1,8 +1,7 @@
-use std::fmt::{Debug, Formatter};
+use crate::ApplicationOptions;
 use clap::Parser;
 use log::info;
-use crate::ApplicationOptions;
-
+use std::fmt::{Debug, Formatter};
 
 impl Clone for ApplicationOptions {
     fn clone(&self) -> Self {
@@ -13,7 +12,6 @@ impl Clone for ApplicationOptions {
     }
 }
 
-
 impl Default for ApplicationOptions {
     fn default() -> Self {
         Self {
@@ -22,7 +20,6 @@ impl Default for ApplicationOptions {
         }
     }
 }
-
 
 impl Debug for ApplicationOptions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
