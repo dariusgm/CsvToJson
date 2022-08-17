@@ -1,17 +1,17 @@
 use std::borrow::Borrow;
 
 use std::error::Error;
-use std::string::String;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::string::String;
 
 use csv::{Reader, StringRecord};
 
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use clap::Parser;
 use crate::parsing::arg_parse;
+use clap::Parser;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 mod parsing;
 
@@ -30,9 +30,8 @@ pub struct ApplicationOptions {
 #[derive(Debug)]
 pub struct ProcessingUnit {
     input: PathBuf,
-    output: PathBuf
+    output: PathBuf,
 }
-
 
 pub fn convert_line(headers: &[String], record: &StringRecord) -> String {
     let mut line = "{".to_owned();
@@ -44,7 +43,6 @@ pub fn convert_line(headers: &[String], record: &StringRecord) -> String {
         line.push_str(&value.replace('\"', "\\\""));
         line.push_str("\",");
     });
-
 
     let mut a = line[0..line.len() - 1].to_string();
     a.push_str("}\n");
@@ -78,7 +76,7 @@ fn build_output_path(output: &Option<String>, input: &Path) -> PathBuf {
             let x = PathBuf::from(o);
             if x.to_string_lossy().contains(".json") {
                 // explicit path, we assume a file - use it directly
-                return x
+                return x;
             } else {
                 // base directory for processing
                 x
@@ -88,7 +86,7 @@ fn build_output_path(output: &Option<String>, input: &Path) -> PathBuf {
 
     let elements = input.iter();
     let size = input.iter().count();
-    for (index , part) in elements.enumerate() {
+    for (index, part) in elements.enumerate() {
         let casted_index = index as i32;
         let casted_size = size as i32 - 1;
         if casted_index < casted_size {
@@ -104,7 +102,6 @@ fn build_output_path(output: &Option<String>, input: &Path) -> PathBuf {
     output_directory
 }
 
-
 pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
     let mut files_to_process = Vec::new();
 
@@ -112,18 +109,12 @@ pub fn collect_files(options: &ApplicationOptions) -> Vec<ProcessingUnit> {
         for entry in glob::glob(argument).unwrap() {
             match entry {
                 Ok(input) => {
-                    let output = build_output_path(
-                        options.output.borrow(),
-                        &input
-                    );
+                    let output = build_output_path(options.output.borrow(), &input);
 
-                    let processing_unit = ProcessingUnit {
-                        input,
-                        output
-                    };
+                    let processing_unit = ProcessingUnit { input, output };
 
                     files_to_process.push(processing_unit)
-                },
+                }
                 // if the path matched but was unreadable,
                 // thereby preventing its contents from matching
                 Err(e) => println!("{:?}", e),
@@ -139,7 +130,8 @@ pub fn convert_data(processing_unit: &ProcessingUnit) {
     }
 
     let mut rdr = Reader::from_path(&processing_unit.input).unwrap();
-    let headers: Vec<String> = rdr.headers()
+    let headers: Vec<String> = rdr
+        .headers()
         .unwrap()
         .iter()
         .map(|s| String::from(s).replace('\"', "\\\""))
@@ -147,7 +139,6 @@ pub fn convert_data(processing_unit: &ProcessingUnit) {
 
     write_to_file(rdr, &headers, &processing_unit.output)
 }
-
 
 pub fn run_by_option(options: &ApplicationOptions) -> Result<(), Box<dyn Error>> {
     let files = collect_files(options);

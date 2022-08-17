@@ -1,7 +1,9 @@
+use std::fs;
 use std::fs::File;
 use std::io::Write;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use csv_to_json::ApplicationOptions;
 
 const BENCHMARK_PATH: &str = "benchmark.csv";
 
@@ -17,11 +19,16 @@ fn generate_data(records: u16) {
 fn criterion_benchmark(c: &mut Criterion) {
     generate_data(10000);
 
-    let _ = c.bench_function("transform", |b| b.iter(|| {
-        let args = vec!["csv_to_json", "--input", BENCHMARK_PATH];
-        let _ = csv_to_json::run_by_str(args);
-        std::fs::remove_file("output.json")
-    }));
+    let _ = c.bench_function("transform", |b| {
+        b.iter(|| {
+            let options = ApplicationOptions { input: vec![BENCHMARK_PATH.to_owned()], output: None};
+            let _ = csv_to_json::run_by_option(&options).unwrap();
+            std::fs::remove_file("output.json")
+        })
+    });
+
+    fs::remove_file("benchmark.csv").unwrap();
+    fs::remove_file("benchmark.csv.json").unwrap();
 }
 
 criterion_group!(benches, criterion_benchmark);
