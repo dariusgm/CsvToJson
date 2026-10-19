@@ -20,10 +20,10 @@ mod parsing;
 #[clap(version = "0.1")]
 #[clap(about = "Converts csv files to json", long_about = None)]
 pub struct ApplicationOptions {
-    #[clap(long, multiple_values = true)]
+    #[clap(long, num_args(1..))]
     pub input: Vec<String>,
 
-    #[clap(long, value_parser)]
+    #[clap(long)]
     pub output: Option<String>,
 }
 

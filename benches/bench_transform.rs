@@ -2,7 +2,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use csv_to_json::ApplicationOptions;
 
 const BENCHMARK_PATH: &str = "benchmark.csv";
